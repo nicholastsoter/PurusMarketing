@@ -39,3 +39,23 @@ create policy "Authenticated users can manage contacts"
 on contacts for all
 using (auth.role() = 'authenticated')
 with check (auth.role() = 'authenticated');
+
+-- Leads dismissed from Find Leads search results, with why — kept so future
+-- searches can exclude them instead of resurfacing the same rejected profile.
+create table if not exists rejected_leads (
+  id uuid primary key default gen_random_uuid(),
+  platform text not null,
+  handle text not null,
+  handle_or_url text,
+  reason text,
+  created_at timestamptz not null default now(),
+  unique (platform, handle)
+);
+
+alter table rejected_leads enable row level security;
+
+drop policy if exists "Authenticated users can manage rejected leads" on rejected_leads;
+create policy "Authenticated users can manage rejected leads"
+on rejected_leads for all
+using (auth.role() = 'authenticated')
+with check (auth.role() = 'authenticated');

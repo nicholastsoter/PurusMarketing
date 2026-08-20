@@ -52,6 +52,29 @@ export const useStore = create((set, get) => ({
     if (error) { set({ contacts: prev }); throw error }
   },
 
+  // Find Leads dedup: existing contacts (by handle_or_url) and previously
+  // rejected leads (by handle) for a platform, so a fresh search can exclude
+  // both instead of resurfacing the same profiles every time.
+  fetchKnownHandles: async (platform) => {
+    const [{ data: contactRows, error: contactErr }, { data: rejectedRows, error: rejectedErr }] = await Promise.all([
+      supabase.from('contacts').select('handle_or_url').eq('platform', platform),
+      supabase.from('rejected_leads').select('handle').eq('platform', platform),
+    ])
+    if (contactErr) throw contactErr
+    if (rejectedErr) throw rejectedErr
+    return {
+      existingUrls: new Set((contactRows || []).map((c) => c.handle_or_url).filter(Boolean)),
+      rejectedHandles: new Set((rejectedRows || []).map((r) => r.handle).filter(Boolean)),
+    }
+  },
+
+  rejectLead: async ({ platform, handle, handleOrUrl, reason }) => {
+    const { error } = await supabase
+      .from('rejected_leads')
+      .upsert({ platform, handle, handle_or_url: handleOrUrl, reason: reason || null }, { onConflict: 'platform,handle' })
+    if (error) throw error
+  },
+
   openContact: (id) => set({ selectedId: id, isCreating: false }),
   openNew: () => set({ isCreating: true, selectedId: null }),
   closeModal: () => set({ selectedId: null, isCreating: false }),

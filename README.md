@@ -38,6 +38,8 @@ The Board, List, and modal all work without this. Both of these need an Apify ac
 
 **Hashtag Research** (Instagram only — there's no single well-established equivalent actor for TikTok) enters a niche keyword and returns related hashtags ranked by volume. It merges Apify's several suggestion "buckets" into one list, so very broad/generic tags (millions+ posts) can outrank more specific ones near the top — scroll for the more targeted ones. Each row can jump straight to Find Leads with that hashtag pre-filled; it doesn't auto-run the search, since that costs Apify credits.
 
+**Rejecting leads & duplicate prevention** — each Find Leads row has a **Reject** button that asks for an optional reason and remembers it, so that profile won't show up in future searches. Every search also skips anyone already in your `contacts` table. Both need the `rejected_leads` table, added to `supabase/schema.sql` — **if you set up the database before this feature existed, re-run the whole file in SQL Editor** (it's written to be safe to re-run: existing tables/policies are left alone, only the new table gets added). Until you do, searches still work — the duplicate check just silently skips itself and Reject shows an error instead of a table-not-found crash.
+
 ## Deploy (Vercel)
 - Import this repo at [vercel.com/new](https://vercel.com/new) — it auto-detects Vite (build command `npm run build`, output `dist`; SPA fallback already set in `vercel.json`).
 - Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and (if using Find Leads) `APIFY_API_TOKEN` under Project Settings → Environment Variables, then redeploy — Vite bakes env vars in at build time, so a plain "add var" isn't enough on its own.

@@ -8,6 +8,8 @@ const inputCls = 'rounded-xl border border-warm-200 px-3.5 py-2.5 text-sm text-[
 
 export default function FindLeadsPage() {
   const bulkAddContacts = useStore((s) => s.bulkAddContacts)
+  const fetchKnownHandles = useStore((s) => s.fetchKnownHandles)
+  const rejectLead = useStore((s) => s.rejectLead)
   const [searchParams] = useSearchParams()
 
   // Supports the handoff from Hashtag Research ("Search in Find Leads"),
@@ -26,6 +28,8 @@ export default function FindLeadsPage() {
   const [selected, setSelected] = useState(new Set())
   const [minFollowers, setMinFollowers] = useState('')
   const [maxFollowers, setMaxFollowers] = useState('')
+  const [allDuplicates, setAllDuplicates] = useState(false)
+  const [rejectingId, setRejectingId] = useState(null)
 
   const visibleResults = useMemo(() => {
     if (!results) return results
@@ -51,6 +55,7 @@ export default function FindLeadsPage() {
     setError('')
     setResults(null)
     setSelected(new Set())
+    setAllDuplicates(false)
     setStatusMessage('Starting search…')
 
     try {
@@ -60,13 +65,51 @@ export default function FindLeadsPage() {
         resultsUrl: (datasetId) => `/api/apify/results?datasetId=${encodeURIComponent(datasetId)}&platform=${encodeURIComponent(platform)}`,
         onProgress: (s) => setStatusMessage(`Searching ${platform} for "${term.trim()}"… (${s}s)`),
       })
-      setResults(items)
-      setStatusMessage(items.length ? '' : 'No results found for that search.')
+
+      // Excludes anyone already in the CRM (by exact profile URL) or already
+      // rejected (by handle) for this platform, so re-running a similar
+      // search doesn't keep resurfacing the same people. Best-effort: if this
+      // fails (e.g. the rejected_leads migration hasn't been run yet), fall
+      // back to showing results unfiltered rather than blocking the search.
+      let existingUrls = new Set()
+      let rejectedHandles = new Set()
+      try {
+        setStatusMessage('Checking for duplicates…')
+        ;({ existingUrls, rejectedHandles } = await fetchKnownHandles(platform))
+      } catch (dupErr) {
+        console.warn('Duplicate check unavailable:', dupErr.message)
+      }
+      const deduped = items.filter((r) => !existingUrls.has(r.handleOrUrl) && !rejectedHandles.has(r.handle))
+
+      setResults(deduped)
+      setAllDuplicates(items.length > 0 && deduped.length === 0)
+      setStatusMessage(deduped.length ? '' : 'No results found for that search.')
     } catch (err) {
       setError(err.message || 'Something went wrong.')
       setResults(null)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleReject = async (r) => {
+    const reason = window.prompt(`Reject @${r.handle}? Add a reason (optional):`)
+    if (reason === null) return // cancelled
+    setRejectingId(r.externalId)
+    setError('')
+    try {
+      await rejectLead({ platform, handle: r.handle, handleOrUrl: r.handleOrUrl, reason: reason.trim() })
+      setResults((prev) => prev.filter((x) => x.externalId !== r.externalId))
+      setSelected((prev) => {
+        if (!prev.has(r.externalId)) return prev
+        const next = new Set(prev)
+        next.delete(r.externalId)
+        return next
+      })
+    } catch (err) {
+      setError(err.message || 'Failed to reject lead.')
+    } finally {
+      setRejectingId(null)
     }
   }
 
@@ -189,9 +232,15 @@ export default function FindLeadsPage() {
         </div>
       )}
 
-      {!loading && !error && results && results.length === 0 && (
+      {!loading && !error && results && results.length === 0 && !allDuplicates && (
         <div className="bg-white rounded-2xl shadow-soft border border-warm-200/70 p-16 text-center">
           <p className="text-sm text-[#6E6E73]">No results found for that search. Try a different hashtag or keyword.</p>
+        </div>
+      )}
+
+      {!loading && !error && allDuplicates && (
+        <div className="bg-white rounded-2xl shadow-soft border border-warm-200/70 p-16 text-center">
+          <p className="text-sm text-[#6E6E73]">Every result from that search is already in your CRM or was previously rejected.</p>
         </div>
       )}
 
@@ -226,6 +275,7 @@ export default function FindLeadsPage() {
                   <th className="px-5 py-3 text-xs font-medium text-[#A9A9AD] uppercase tracking-wide">Followers</th>
                   <th className="px-5 py-3 text-xs font-medium text-[#A9A9AD] uppercase tracking-wide">Email</th>
                   <th className="px-5 py-3 text-xs font-medium text-[#A9A9AD] uppercase tracking-wide">Bio</th>
+                  <th className="px-5 py-3 w-20" />
                 </tr>
               </thead>
               <tbody>
@@ -259,6 +309,15 @@ export default function FindLeadsPage() {
                     </td>
                     <td className="px-5 py-3.5 text-[#6E6E73] whitespace-nowrap">{r.email || '—'}</td>
                     <td className="px-5 py-3.5 text-[#6E6E73] max-w-sm truncate">{r.bio || '—'}</td>
+                    <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => handleReject(r)}
+                        disabled={rejectingId === r.externalId}
+                        className="text-xs text-rose-500 hover:text-rose-600 transition disabled:opacity-50"
+                      >
+                        {rejectingId === r.externalId ? 'Rejecting…' : 'Reject'}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
