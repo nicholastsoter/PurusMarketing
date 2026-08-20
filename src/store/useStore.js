@@ -8,6 +8,23 @@ export const useStore = create((set, get) => ({
   selectedId: null,
   isCreating: false,
 
+  // Find Leads state lives here (not in the page component's local state) so
+  // it survives navigating to another tab and back — React Router unmounts
+  // the page, which would otherwise silently discard search results the
+  // user already spent Apify credits on.
+  leadsPlatform: 'Instagram',
+  leadsTerm: '',
+  leadsMinFollowers: '',
+  leadsMaxFollowers: '',
+  leadsResults: null,
+  leadsSelected: new Set(),
+  leadsAllDuplicates: false,
+  leadsLoading: false,
+  leadsAdding: false,
+  leadsStatusMessage: '',
+  leadsError: '',
+  leadsRejectingId: null,
+
   fetchContacts: async () => {
     set({ loading: true, error: null })
     const { data, error } = await supabase.from('contacts').select('*').order('created_at', { ascending: false })

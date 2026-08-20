@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { SEARCH_PLATFORMS } from '../lib/constants'
@@ -12,24 +12,35 @@ export default function FindLeadsPage() {
   const rejectLead = useStore((s) => s.rejectLead)
   const [searchParams] = useSearchParams()
 
+  // State below lives in the global store (not local useState) so it
+  // survives navigating to another tab and back — React Router unmounts
+  // this page, which would otherwise silently discard search results the
+  // user already spent Apify credits on.
+  const platform = useStore((s) => s.leadsPlatform)
+  const term = useStore((s) => s.leadsTerm)
+  const loading = useStore((s) => s.leadsLoading)
+  const adding = useStore((s) => s.leadsAdding)
+  const statusMessage = useStore((s) => s.leadsStatusMessage)
+  const error = useStore((s) => s.leadsError)
+  const results = useStore((s) => s.leadsResults)
+  const selected = useStore((s) => s.leadsSelected)
+  const minFollowers = useStore((s) => s.leadsMinFollowers)
+  const maxFollowers = useStore((s) => s.leadsMaxFollowers)
+  const allDuplicates = useStore((s) => s.leadsAllDuplicates)
+  const rejectingId = useStore((s) => s.leadsRejectingId)
+
   // Supports the handoff from Hashtag Research ("Search in Find Leads"),
-  // which links here with ?platform=&term= pre-filled. Runs nothing on its
-  // own — the user still clicks Search, since a run costs Apify credits.
-  const [platform, setPlatform] = useState(() => {
+  // which links here with ?platform=&term= pre-filled. Only applies when
+  // those params are actually present — a plain click on the Find Leads
+  // nav tab carries none, and must leave whatever's already persisted alone.
+  useEffect(() => {
     const p = searchParams.get('platform')
-    return SEARCH_PLATFORMS.includes(p) ? p : 'Instagram'
-  })
-  const [term, setTerm] = useState(() => searchParams.get('term') || '')
-  const [loading, setLoading] = useState(false)
-  const [adding, setAdding] = useState(false)
-  const [statusMessage, setStatusMessage] = useState('')
-  const [error, setError] = useState('')
-  const [results, setResults] = useState(null)
-  const [selected, setSelected] = useState(new Set())
-  const [minFollowers, setMinFollowers] = useState('')
-  const [maxFollowers, setMaxFollowers] = useState('')
-  const [allDuplicates, setAllDuplicates] = useState(false)
-  const [rejectingId, setRejectingId] = useState(null)
+    const t = searchParams.get('term')
+    const patch = {}
+    if (p && SEARCH_PLATFORMS.includes(p)) patch.leadsPlatform = p
+    if (t) patch.leadsTerm = t
+    if (Object.keys(patch).length) useStore.setState(patch)
+  }, [searchParams])
 
   const visibleResults = useMemo(() => {
     if (!results) return results
@@ -54,19 +65,21 @@ export default function FindLeadsPage() {
     e.preventDefault()
     if (!term.trim() || loading) return
 
-    setLoading(true)
-    setError('')
-    setResults(null)
-    setSelected(new Set())
-    setAllDuplicates(false)
-    setStatusMessage('Starting search…')
+    useStore.setState({
+      leadsLoading: true,
+      leadsError: '',
+      leadsResults: null,
+      leadsSelected: new Set(),
+      leadsAllDuplicates: false,
+      leadsStatusMessage: 'Starting search…',
+    })
 
     try {
       const { items } = await runApifySearch({
         startUrl: '/api/apify/start',
         startBody: { platform, searchTerm: term.trim() },
         resultsUrl: (datasetId) => `/api/apify/results?datasetId=${encodeURIComponent(datasetId)}&platform=${encodeURIComponent(platform)}`,
-        onProgress: (s) => setStatusMessage(`Searching ${platform} for "${term.trim()}"… (${s}s)`),
+        onProgress: (s) => useStore.setState({ leadsStatusMessage: `Searching ${platform} for "${term.trim()}"… (${s}s)` }),
       })
 
       // Excludes anyone already in the CRM (by exact profile URL) or already
@@ -77,63 +90,65 @@ export default function FindLeadsPage() {
       let existingUrls = new Set()
       let rejectedHandles = new Set()
       try {
-        setStatusMessage('Checking for duplicates…')
+        useStore.setState({ leadsStatusMessage: 'Checking for duplicates…' })
         ;({ existingUrls, rejectedHandles } = await fetchKnownHandles(platform))
       } catch (dupErr) {
         console.warn('Duplicate check unavailable:', dupErr.message)
       }
       const deduped = items.filter((r) => !existingUrls.has(r.handleOrUrl) && !rejectedHandles.has(r.handle))
 
-      setResults(deduped)
-      setAllDuplicates(items.length > 0 && deduped.length === 0)
-      setStatusMessage(deduped.length ? '' : 'No results found for that search.')
+      useStore.setState({
+        leadsResults: deduped,
+        leadsAllDuplicates: items.length > 0 && deduped.length === 0,
+        leadsStatusMessage: deduped.length ? '' : 'No results found for that search.',
+      })
     } catch (err) {
-      setError(err.message || 'Something went wrong.')
-      setResults(null)
+      useStore.setState({ leadsError: err.message || 'Something went wrong.', leadsResults: null })
     } finally {
-      setLoading(false)
+      useStore.setState({ leadsLoading: false })
     }
   }
 
   const handleReject = async (r) => {
     const reason = window.prompt(`Reject @${r.handle}? Add a reason (optional):`)
     if (reason === null) return // cancelled
-    setRejectingId(r.externalId)
-    setError('')
+    useStore.setState({ leadsRejectingId: r.externalId, leadsError: '' })
     try {
       await rejectLead({ platform, handle: r.handle, handleOrUrl: r.handleOrUrl, reason: reason.trim() })
-      setResults((prev) => prev.filter((x) => x.externalId !== r.externalId))
-      setSelected((prev) => {
-        if (!prev.has(r.externalId)) return prev
-        const next = new Set(prev)
-        next.delete(r.externalId)
-        return next
+      useStore.setState((s) => {
+        const nextSelected = new Set(s.leadsSelected)
+        nextSelected.delete(r.externalId)
+        return {
+          leadsResults: s.leadsResults.filter((x) => x.externalId !== r.externalId),
+          leadsSelected: nextSelected,
+        }
       })
     } catch (err) {
-      setError(err.message || 'Failed to reject lead.')
+      useStore.setState({ leadsError: err.message || 'Failed to reject lead.' })
     } finally {
-      setRejectingId(null)
+      useStore.setState({ leadsRejectingId: null })
     }
   }
 
   const toggleOne = (id) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
+    useStore.setState((s) => {
+      const next = new Set(s.leadsSelected)
       if (next.has(id)) next.delete(id)
       else next.add(id)
-      return next
+      return { leadsSelected: next }
     })
   }
 
   const toggleAll = () => {
     if (!visibleResults?.length) return
-    setSelected((prev) => (prev.size === visibleResults.length ? new Set() : new Set(visibleResults.map((r) => r.externalId))))
+    useStore.setState((s) => ({
+      leadsSelected: s.leadsSelected.size === visibleResults.length ? new Set() : new Set(visibleResults.map((r) => r.externalId)),
+    }))
   }
 
   const addSelected = async () => {
     if (!results?.length || !selected.size) return
-    setAdding(true)
-    setError('')
+    useStore.setState({ leadsAdding: true, leadsError: '' })
     const rows = results
       .filter((r) => selected.has(r.externalId))
       .map((r) => ({
@@ -149,12 +164,14 @@ export default function FindLeadsPage() {
       }))
     try {
       await bulkAddContacts(rows)
-      setResults((prev) => prev.filter((r) => !selected.has(r.externalId)))
-      setSelected(new Set())
+      useStore.setState((s) => ({
+        leadsResults: s.leadsResults.filter((r) => !selected.has(r.externalId)),
+        leadsSelected: new Set(),
+      }))
     } catch (err) {
-      setError(err.message || 'Failed to add contacts.')
+      useStore.setState({ leadsError: err.message || 'Failed to add contacts.' })
     } finally {
-      setAdding(false)
+      useStore.setState({ leadsAdding: false })
     }
   }
 
@@ -169,7 +186,12 @@ export default function FindLeadsPage() {
         <div className="flex flex-wrap items-end gap-3">
           <label className="space-y-1.5">
             <span className="block text-xs font-medium text-[#6E6E73]">Platform</span>
-            <select className={inputCls} value={platform} onChange={(e) => setPlatform(e.target.value)} disabled={loading}>
+            <select
+              className={inputCls}
+              value={platform}
+              onChange={(e) => useStore.setState({ leadsPlatform: e.target.value })}
+              disabled={loading}
+            >
               {SEARCH_PLATFORMS.map((p) => (
                 <option key={p} value={p}>{p}</option>
               ))}
@@ -180,7 +202,7 @@ export default function FindLeadsPage() {
             <input
               className={`${inputCls} w-full`}
               value={term}
-              onChange={(e) => setTerm(e.target.value)}
+              onChange={(e) => useStore.setState({ leadsTerm: e.target.value })}
               placeholder="homeschoolmom"
               disabled={loading}
             />
@@ -192,7 +214,7 @@ export default function FindLeadsPage() {
               min="0"
               className={`${inputCls} w-28 disabled:opacity-40 disabled:cursor-not-allowed`}
               value={minFollowers}
-              onChange={(e) => setMinFollowers(e.target.value)}
+              onChange={(e) => useStore.setState({ leadsMinFollowers: e.target.value })}
               placeholder="0"
               disabled={platform === 'Instagram'}
             />
@@ -204,7 +226,7 @@ export default function FindLeadsPage() {
               min="0"
               className={`${inputCls} w-28 disabled:opacity-40 disabled:cursor-not-allowed`}
               value={maxFollowers}
-              onChange={(e) => setMaxFollowers(e.target.value)}
+              onChange={(e) => useStore.setState({ leadsMaxFollowers: e.target.value })}
               placeholder="Any"
               disabled={platform === 'Instagram'}
             />
