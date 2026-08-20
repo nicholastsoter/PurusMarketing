@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import StatusBadge from './StatusBadge'
 import NicheTag from './NicheTag'
+import { isHttpUrl } from '../lib/url'
 
 export default function ContactTable() {
   const contacts = useStore((s) => s.contacts)
@@ -47,7 +48,24 @@ export default function ContactTable() {
               onClick={() => openContact(c.id)}
               className="border-b border-warm-100 last:border-0 hover:bg-warm-50 cursor-pointer transition"
             >
-              <td className="px-5 py-3.5 font-medium text-[#1D1D1F] whitespace-nowrap">{c.name}</td>
+              <td className="px-5 py-3.5 whitespace-nowrap">
+                <p className="font-medium text-[#1D1D1F]">{c.name}</p>
+                {c.handle_or_url && (
+                  isHttpUrl(c.handle_or_url) ? (
+                    <a
+                      href={c.handle_or_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs text-accent-500 hover:text-accent-600 hover:underline transition"
+                    >
+                      {c.handle_or_url.replace(/^https?:\/\//i, '')}
+                    </a>
+                  ) : (
+                    <p className="text-xs text-[#A9A9AD]">{c.handle_or_url}</p>
+                  )
+                )}
+              </td>
               <td className="px-5 py-3.5 text-[#6E6E73] whitespace-nowrap">{c.platform}</td>
               <td className="px-5 py-3.5"><NicheTag niche={c.niche} /></td>
               <td className="px-5 py-3.5"><StatusBadge status={c.status} /></td>

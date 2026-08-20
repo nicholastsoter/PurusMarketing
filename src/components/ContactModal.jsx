@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { PLATFORMS, STATUSES, NICHE_SUGGESTIONS } from '../lib/constants'
+import { isHttpUrl } from '../lib/url'
 
 const emptyForm = {
   name: '',
@@ -108,7 +109,21 @@ export default function ContactModal() {
             </Field>
           </div>
 
-          <Field label="Handle / URL">
+          <Field
+            label="Handle / URL"
+            action={
+              isHttpUrl(form.handle_or_url) && (
+                <a
+                  href={form.handle_or_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-accent-500 hover:text-accent-600 hover:underline transition"
+                >
+                  Open ↗
+                </a>
+              )
+            }
+          >
             <input className={inputCls} value={form.handle_or_url} onChange={set('handle_or_url')} placeholder="@handle or link" />
           </Field>
 
@@ -173,10 +188,13 @@ export default function ContactModal() {
   )
 }
 
-function Field({ label, children }) {
+function Field({ label, action, children }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-medium text-[#6E6E73]">{label}</span>
+      <span className="flex items-center justify-between">
+        <span className="text-xs font-medium text-[#6E6E73]">{label}</span>
+        {action}
+      </span>
       {children}
     </label>
   )
