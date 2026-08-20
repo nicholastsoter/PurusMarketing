@@ -33,6 +33,9 @@ export default function FindLeadsPage() {
 
   const visibleResults = useMemo(() => {
     if (!results) return results
+    // Instagram results never have a follower count, so a leftover min/max
+    // from a previous TikTok/YouTube search must not silently zero these out.
+    if (platform === 'Instagram') return results
     const min = minFollowers === '' ? null : Number(minFollowers)
     const max = maxFollowers === '' ? null : Number(maxFollowers)
     if (min == null && max == null) return results
@@ -45,7 +48,7 @@ export default function FindLeadsPage() {
       if (max != null && r.followerCount > max) return false
       return true
     })
-  }, [results, minFollowers, maxFollowers])
+  }, [results, minFollowers, maxFollowers, platform])
 
   const runSearch = async (e) => {
     e.preventDefault()
@@ -187,10 +190,11 @@ export default function FindLeadsPage() {
             <input
               type="number"
               min="0"
-              className={`${inputCls} w-28`}
+              className={`${inputCls} w-28 disabled:opacity-40 disabled:cursor-not-allowed`}
               value={minFollowers}
               onChange={(e) => setMinFollowers(e.target.value)}
               placeholder="0"
+              disabled={platform === 'Instagram'}
             />
           </label>
           <label className="space-y-1.5">
@@ -198,10 +202,11 @@ export default function FindLeadsPage() {
             <input
               type="number"
               min="0"
-              className={`${inputCls} w-28`}
+              className={`${inputCls} w-28 disabled:opacity-40 disabled:cursor-not-allowed`}
               value={maxFollowers}
               onChange={(e) => setMaxFollowers(e.target.value)}
               placeholder="Any"
+              disabled={platform === 'Instagram'}
             />
           </label>
           <button
@@ -212,9 +217,9 @@ export default function FindLeadsPage() {
             {loading ? 'Searching…' : 'Search'}
           </button>
         </div>
-        {platform === 'Instagram' && (minFollowers !== '' || maxFollowers !== '') && (
+        {platform === 'Instagram' && (
           <p className="text-xs text-[#A9A9AD]">
-            Instagram results don't include follower counts (the hashtag scraper returns posts, not profile stats), so a range filter excludes all of them.
+            Instagram results don't include follower counts (the hashtag scraper returns posts, not profile stats), so the follower filter is unavailable here.
           </p>
         )}
       </form>
