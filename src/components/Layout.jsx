@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 import StatsBar from './StatsBar'
+import purusWordmark from '../assets/purus-wordmark.png'
 
 export default function Layout({ children }) {
   const { signOut, user } = useAuth()
@@ -9,7 +10,7 @@ export default function Layout({ children }) {
       <header className="border-b border-warm-200/70 bg-warm-50/90 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <h1 className="text-base font-semibold text-[#1D1D1F] tracking-tight">Purus CRM</h1>
+            <img src={purusWordmark} alt="Purus" className="h-6 w-auto" />
             <nav className="flex gap-1">
               <NavTab to="/">Board</NavTab>
               <NavTab to="/list">List</NavTab>
