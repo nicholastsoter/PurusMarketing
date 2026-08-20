@@ -22,6 +22,14 @@ export const useStore = create((set, get) => ({
     return data
   },
 
+  // Used by Find Leads to insert several imported profiles at once.
+  bulkAddContacts: async (rows) => {
+    const { data, error } = await supabase.from('contacts').insert(rows).select()
+    if (error) throw error
+    set((s) => ({ contacts: [...data, ...s.contacts] }))
+    return data
+  },
+
   updateContact: async (id, fields) => {
     const { data, error } = await supabase.from('contacts').update(fields).eq('id', id).select().single()
     if (error) throw error

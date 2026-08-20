@@ -14,6 +14,7 @@ export default function Layout({ children }) {
             <nav className="flex gap-1">
               <NavTab to="/">Board</NavTab>
               <NavTab to="/list">List</NavTab>
+              <NavTab to="/find-leads">Find Leads</NavTab>
             </nav>
           </div>
           <div className="flex items-center gap-4">
