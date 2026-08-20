@@ -89,11 +89,23 @@ function normalize(platform, items) {
   return []
 }
 
+const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/
+
+// Creators commonly list a business/collab email in their bio or channel
+// description; this is a best-effort scrape of whatever text we already have
+// (no extra API calls). Instagram's hashtag scraper only gives us post
+// captions, not the poster's bio, so a hit there is rare but still checked.
+function extractEmail(text) {
+  const match = text && String(text).match(EMAIL_RE)
+  return match ? match[0] : null
+}
+
 function normalizeInstagram(items) {
   const seen = new Map()
   for (const item of items) {
     const handle = item.ownerUsername
     if (!handle || seen.has(handle)) continue
+    const rawText = item.caption || ''
     seen.set(handle, {
       externalId: item.ownerId || handle,
       name: item.ownerFullName || handle,
@@ -102,7 +114,8 @@ function normalizeInstagram(items) {
       // The hashtag scraper returns posts, not profile stats — Instagram
       // doesn't expose follower count here without a second profile lookup.
       followerCount: null,
-      bio: item.caption ? String(item.caption).slice(0, 160) : '',
+      bio: rawText.slice(0, 160),
+      email: extractEmail(rawText),
     })
   }
   return [...seen.values()]
@@ -113,13 +126,15 @@ function normalizeTikTok(items) {
   for (const item of items) {
     const author = item.authorMeta
     if (!author?.name || seen.has(author.name)) continue
+    const rawText = author.signature || ''
     seen.set(author.name, {
       externalId: author.id || author.name,
       name: author.nickName || author.name,
       handle: author.name,
       handleOrUrl: `https://www.tiktok.com/@${author.name}`,
       followerCount: typeof author.fans === 'number' ? author.fans : null,
-      bio: author.signature || '',
+      bio: rawText,
+      email: extractEmail(rawText),
     })
   }
   return [...seen.values()]
@@ -130,13 +145,15 @@ function normalizeYouTube(items) {
   for (const item of items) {
     const handle = item.channelName
     if (!handle || seen.has(handle)) continue
+    const rawText = item.channelDescription || ''
     seen.set(handle, {
       externalId: item.channelUrl || handle,
       name: handle,
       handle,
       handleOrUrl: item.channelUrl || '',
       followerCount: typeof item.numberOfSubscribers === 'number' ? item.numberOfSubscribers : null,
-      bio: item.channelDescription ? String(item.channelDescription).slice(0, 160) : '',
+      bio: rawText.slice(0, 160),
+      email: extractEmail(rawText),
     })
   }
   return [...seen.values()]

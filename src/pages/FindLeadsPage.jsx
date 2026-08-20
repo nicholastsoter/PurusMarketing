@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { SEARCH_PLATFORMS } from '../lib/constants'
 
@@ -29,6 +29,24 @@ export default function FindLeadsPage() {
   const [error, setError] = useState('')
   const [results, setResults] = useState(null)
   const [selected, setSelected] = useState(new Set())
+  const [minFollowers, setMinFollowers] = useState('')
+  const [maxFollowers, setMaxFollowers] = useState('')
+
+  const visibleResults = useMemo(() => {
+    if (!results) return results
+    const min = minFollowers === '' ? null : Number(minFollowers)
+    const max = maxFollowers === '' ? null : Number(maxFollowers)
+    if (min == null && max == null) return results
+    // Followers is unknown for some leads (e.g. all Instagram results, since
+    // the hashtag scraper doesn't return profile stats) — exclude those when
+    // a range is set rather than guess, since we can't confirm they qualify.
+    return results.filter((r) => {
+      if (r.followerCount == null) return false
+      if (min != null && r.followerCount < min) return false
+      if (max != null && r.followerCount > max) return false
+      return true
+    })
+  }, [results, minFollowers, maxFollowers])
 
   const runSearch = async (e) => {
     e.preventDefault()
@@ -88,8 +106,8 @@ export default function FindLeadsPage() {
   }
 
   const toggleAll = () => {
-    if (!results?.length) return
-    setSelected((prev) => (prev.size === results.length ? new Set() : new Set(results.map((r) => r.externalId))))
+    if (!visibleResults?.length) return
+    setSelected((prev) => (prev.size === visibleResults.length ? new Set() : new Set(visibleResults.map((r) => r.externalId))))
   }
 
   const addSelected = async () => {
@@ -106,7 +124,7 @@ export default function FindLeadsPage() {
         niche: '',
         status: 'Identified',
         offer_code: null,
-        contact_info: '',
+        contact_info: r.email || '',
         notes: r.bio ? `Bio: ${r.bio}` : '',
       }))
     try {
@@ -127,32 +145,61 @@ export default function FindLeadsPage() {
         <p className="text-sm text-[#6E6E73] mt-0.5">Search a hashtag or keyword to discover creators, then add the ones you like to the CRM.</p>
       </div>
 
-      <form onSubmit={runSearch} className="bg-white rounded-2xl shadow-soft border border-warm-200/70 p-5 flex flex-wrap items-end gap-3">
-        <label className="space-y-1.5">
-          <span className="block text-xs font-medium text-[#6E6E73]">Platform</span>
-          <select className={inputCls} value={platform} onChange={(e) => setPlatform(e.target.value)} disabled={loading}>
-            {SEARCH_PLATFORMS.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </label>
-        <label className="flex-1 min-w-[220px] space-y-1.5">
-          <span className="block text-xs font-medium text-[#6E6E73]">Hashtag or keyword</span>
-          <input
-            className={`${inputCls} w-full`}
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-            placeholder="homeschoolmom"
-            disabled={loading}
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={loading || !term.trim()}
-          className="px-4 py-2.5 rounded-xl text-sm font-medium bg-accent-500 hover:bg-accent-600 text-white transition disabled:opacity-50"
-        >
-          {loading ? 'Searching…' : 'Search'}
-        </button>
+      <form onSubmit={runSearch} className="bg-white rounded-2xl shadow-soft border border-warm-200/70 p-5 space-y-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="space-y-1.5">
+            <span className="block text-xs font-medium text-[#6E6E73]">Platform</span>
+            <select className={inputCls} value={platform} onChange={(e) => setPlatform(e.target.value)} disabled={loading}>
+              {SEARCH_PLATFORMS.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex-1 min-w-[220px] space-y-1.5">
+            <span className="block text-xs font-medium text-[#6E6E73]">Hashtag or keyword</span>
+            <input
+              className={`${inputCls} w-full`}
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              placeholder="homeschoolmom"
+              disabled={loading}
+            />
+          </label>
+          <label className="space-y-1.5">
+            <span className="block text-xs font-medium text-[#6E6E73]">Min followers</span>
+            <input
+              type="number"
+              min="0"
+              className={`${inputCls} w-28`}
+              value={minFollowers}
+              onChange={(e) => setMinFollowers(e.target.value)}
+              placeholder="0"
+            />
+          </label>
+          <label className="space-y-1.5">
+            <span className="block text-xs font-medium text-[#6E6E73]">Max followers</span>
+            <input
+              type="number"
+              min="0"
+              className={`${inputCls} w-28`}
+              value={maxFollowers}
+              onChange={(e) => setMaxFollowers(e.target.value)}
+              placeholder="Any"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={loading || !term.trim()}
+            className="px-4 py-2.5 rounded-xl text-sm font-medium bg-accent-500 hover:bg-accent-600 text-white transition disabled:opacity-50"
+          >
+            {loading ? 'Searching…' : 'Search'}
+          </button>
+        </div>
+        {platform === 'Instagram' && (minFollowers !== '' || maxFollowers !== '') && (
+          <p className="text-xs text-[#A9A9AD]">
+            Instagram results don't include follower counts (the hashtag scraper returns posts, not profile stats), so a range filter excludes all of them.
+          </p>
+        )}
       </form>
 
       {loading && (
@@ -174,11 +221,17 @@ export default function FindLeadsPage() {
         </div>
       )}
 
-      {!loading && results && results.length > 0 && (
+      {!loading && !error && results && results.length > 0 && visibleResults.length === 0 && (
+        <div className="bg-white rounded-2xl shadow-soft border border-warm-200/70 p-16 text-center">
+          <p className="text-sm text-[#6E6E73]">No results match that follower range. Try widening it.</p>
+        </div>
+      )}
+
+      {!loading && visibleResults && visibleResults.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 text-xs text-[#6E6E73]">
-              <input type="checkbox" checked={selected.size === results.length} onChange={toggleAll} />
+              <input type="checkbox" checked={selected.size === visibleResults.length} onChange={toggleAll} />
               {selected.size ? `${selected.size} selected` : 'Select all'}
             </label>
             <button
@@ -197,11 +250,12 @@ export default function FindLeadsPage() {
                   <th className="px-5 py-3 w-8" />
                   <th className="px-5 py-3 text-xs font-medium text-[#A9A9AD] uppercase tracking-wide">Handle</th>
                   <th className="px-5 py-3 text-xs font-medium text-[#A9A9AD] uppercase tracking-wide">Followers</th>
+                  <th className="px-5 py-3 text-xs font-medium text-[#A9A9AD] uppercase tracking-wide">Email</th>
                   <th className="px-5 py-3 text-xs font-medium text-[#A9A9AD] uppercase tracking-wide">Bio</th>
                 </tr>
               </thead>
               <tbody>
-                {results.map((r) => (
+                {visibleResults.map((r) => (
                   <tr
                     key={r.externalId}
                     onClick={() => toggleOne(r.externalId)}
@@ -229,6 +283,7 @@ export default function FindLeadsPage() {
                     <td className="px-5 py-3.5 text-[#6E6E73] whitespace-nowrap">
                       {r.followerCount != null ? r.followerCount.toLocaleString() : '—'}
                     </td>
+                    <td className="px-5 py-3.5 text-[#6E6E73] whitespace-nowrap">{r.email || '—'}</td>
                     <td className="px-5 py-3.5 text-[#6E6E73] max-w-sm truncate">{r.bio || '—'}</td>
                   </tr>
                 ))}
