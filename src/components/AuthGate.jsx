@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../lib/AuthContext'
+import purusWordmark from '../assets/purus-wordmark.png'
 
 const inputCls = 'w-full rounded-xl border border-warm-200 px-4 py-2.5 text-sm text-[#1D1D1F] placeholder:text-[#A9A9AD] focus:outline-none focus:ring-2 focus:ring-accent-400/40 focus:border-accent-400 transition'
 
@@ -62,8 +63,8 @@ function LoginForm({ signIn, signUp }) {
 
   return (
     <form onSubmit={submit} className="bg-white rounded-2xl shadow-soft border border-warm-200/70 p-8 space-y-5">
-      <div className="text-center space-y-1">
-        <h1 className="text-xl font-semibold text-[#1D1D1F] tracking-tight">Purus CRM</h1>
+      <div className="text-center space-y-2">
+        <img src={purusWordmark} alt="Purus" className="h-8 w-auto mx-auto" />
         <p className="text-sm text-[#6E6E73]">{mode === 'signin' ? 'Sign in to continue' : 'Create your account'}</p>
       </div>
       <div className="space-y-3">
