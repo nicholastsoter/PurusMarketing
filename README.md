@@ -28,13 +28,15 @@ This is single-user, so there's no team invite flow. Easiest path:
 2. Copy `.env.example` to `.env` and fill them in.
 3. `npm install && npm run dev`.
 
-### 4. Find Leads (Apify) — optional
-The Board, List, and modal all work without this. Find Leads needs an Apify account:
+### 4. Find Leads & Hashtag Research (Apify) — optional
+The Board, List, and modal all work without this. Both of these need an Apify account:
 1. Get an API token from the [Apify Console](https://console.apify.com/) → **Settings → Integrations**.
 2. Add it to `.env` as `APIFY_API_TOKEN` (no `VITE_` prefix — it's read server-side only, by `/api/apify/*`, and is never bundled into the browser code).
 3. `npm run dev` proxies those routes locally too (see `vite.config.js`), so no separate process is needed.
 
-Search results are capped at ~30 per platform to keep runs fast and cheap. Instagram's hashtag scraper returns post data, not profile stats, so follower count is left blank for Instagram leads — TikTok and YouTube results do include it.
+**Find Leads** results are capped at ~30 per platform to keep runs fast and cheap. Instagram's hashtag scraper returns post data, not profile stats, so follower count is left blank for Instagram leads — TikTok and YouTube results do include it. Email is a best-effort regex scrape of whatever bio/description text is already returned, not a separate lookup.
+
+**Hashtag Research** (Instagram only — there's no single well-established equivalent actor for TikTok) enters a niche keyword and returns related hashtags ranked by volume. It merges Apify's several suggestion "buckets" into one list, so very broad/generic tags (millions+ posts) can outrank more specific ones near the top — scroll for the more targeted ones. Each row can jump straight to Find Leads with that hashtag pre-filled; it doesn't auto-run the search, since that costs Apify credits.
 
 ## Deploy (Vercel)
 - Import this repo at [vercel.com/new](https://vercel.com/new) — it auto-detects Vite (build command `npm run build`, output `dist`; SPA fallback already set in `vercel.json`).

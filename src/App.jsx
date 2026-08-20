@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import BoardPage from './pages/BoardPage'
 import ListPage from './pages/ListPage'
 import FindLeadsPage from './pages/FindLeadsPage'
+import HashtagResearchPage from './pages/HashtagResearchPage'
 import ContactModal from './components/ContactModal'
 import { useStore } from './store/useStore'
 
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/" element={<BoardPage />} />
         <Route path="/list" element={<ListPage />} />
         <Route path="/find-leads" element={<FindLeadsPage />} />
+        <Route path="/hashtags" element={<HashtagResearchPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <ContactModal />

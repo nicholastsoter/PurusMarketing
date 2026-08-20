@@ -1,28 +1,23 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { SEARCH_PLATFORMS } from '../lib/constants'
+import { runApifySearch } from '../lib/apifyClient'
 
 const inputCls = 'rounded-xl border border-warm-200 px-3.5 py-2.5 text-sm text-[#1D1D1F] placeholder:text-[#A9A9AD] focus:outline-none focus:ring-2 focus:ring-accent-400/40 focus:border-accent-400 transition'
-const POLL_INTERVAL_MS = 2500
-const MAX_POLL_MS = 120000
-const TERMINAL_FAILURE_STATUSES = ['FAILED', 'ABORTED', 'TIMED-OUT']
-
-async function requestJson(url, options) {
-  const res = await fetch(url, options)
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
-  return data
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
 
 export default function FindLeadsPage() {
   const bulkAddContacts = useStore((s) => s.bulkAddContacts)
+  const [searchParams] = useSearchParams()
 
-  const [platform, setPlatform] = useState('Instagram')
-  const [term, setTerm] = useState('')
+  // Supports the handoff from Hashtag Research ("Search in Find Leads"),
+  // which links here with ?platform=&term= pre-filled. Runs nothing on its
+  // own — the user still clicks Search, since a run costs Apify credits.
+  const [platform, setPlatform] = useState(() => {
+    const p = searchParams.get('platform')
+    return SEARCH_PLATFORMS.includes(p) ? p : 'Instagram'
+  })
+  const [term, setTerm] = useState(() => searchParams.get('term') || '')
   const [loading, setLoading] = useState(false)
   const [adding, setAdding] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
@@ -59,33 +54,12 @@ export default function FindLeadsPage() {
     setStatusMessage('Starting search…')
 
     try {
-      const { runId, datasetId: startingDatasetId, status: startingStatus } = await requestJson('/api/apify/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform, searchTerm: term.trim() }),
+      const { items } = await runApifySearch({
+        startUrl: '/api/apify/start',
+        startBody: { platform, searchTerm: term.trim() },
+        resultsUrl: (datasetId) => `/api/apify/results?datasetId=${encodeURIComponent(datasetId)}&platform=${encodeURIComponent(platform)}`,
+        onProgress: (s) => setStatusMessage(`Searching ${platform} for "${term.trim()}"… (${s}s)`),
       })
-
-      let datasetId = startingDatasetId
-      let status = startingStatus
-      const startedAt = Date.now()
-
-      while (status !== 'SUCCEEDED') {
-        if (TERMINAL_FAILURE_STATUSES.includes(status)) {
-          throw new Error(`Search ${status.toLowerCase().replace('-', ' ')} — try a different term, or check the run in your Apify dashboard.`)
-        }
-        if (Date.now() - startedAt > MAX_POLL_MS) {
-          throw new Error('This search is taking longer than expected. Check the run status in your Apify dashboard.')
-        }
-        setStatusMessage(`Searching ${platform} for "${term.trim()}"… (${Math.round((Date.now() - startedAt) / 1000)}s)`)
-        await sleep(POLL_INTERVAL_MS)
-
-        const next = await requestJson(`/api/apify/status?runId=${encodeURIComponent(runId)}`)
-        status = next.status
-        if (next.datasetId) datasetId = next.datasetId
-      }
-
-      setStatusMessage('Fetching results…')
-      const { items } = await requestJson(`/api/apify/results?datasetId=${encodeURIComponent(datasetId)}&platform=${encodeURIComponent(platform)}`)
       setResults(items)
       setStatusMessage(items.length ? '' : 'No results found for that search.')
     } catch (err) {

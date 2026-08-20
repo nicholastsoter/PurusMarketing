@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import { startRun, getRunStatus, getResults } from './server/apify.js'
+import { startRun, getRunStatus, getResults, startHashtagRun, getHashtagResults } from './server/apify.js'
 
 export default defineConfig(({ mode }) => {
   // Vite only exposes VITE_-prefixed vars to client code via import.meta.env.
@@ -55,6 +55,32 @@ function apifyDevApi() {
           sendJson(res, 200, { items })
         } catch (err) {
           sendJson(res, err.statusCode || 500, { error: err.message || 'Failed to fetch results' })
+        }
+      })
+
+      server.middlewares.use('/api/apify/hashtags/start', async (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
+        let body = ''
+        req.on('data', (chunk) => { body += chunk })
+        req.on('end', async () => {
+          try {
+            const { term } = body ? JSON.parse(body) : {}
+            const result = await startHashtagRun(term)
+            sendJson(res, 200, result)
+          } catch (err) {
+            sendJson(res, err.statusCode || 500, { error: err.message || 'Failed to start hashtag research' })
+          }
+        })
+      })
+
+      server.middlewares.use('/api/apify/hashtags/results', async (req, res) => {
+        if (req.method !== 'GET') { res.statusCode = 405; res.end(); return }
+        try {
+          const { searchParams } = new URL(req.url, 'http://localhost')
+          const result = await getHashtagResults(searchParams.get('datasetId'))
+          sendJson(res, 200, result)
+        } catch (err) {
+          sendJson(res, err.statusCode || 500, { error: err.message || 'Failed to fetch hashtag results' })
         }
       })
     },

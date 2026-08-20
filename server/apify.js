@@ -8,6 +8,12 @@ const ACTOR_IDS = {
   YouTube: 'streamers/youtube-scraper',
 }
 
+// Instagram-only: Apify's official hashtag analytics actor is well-documented
+// and maintained by Apify itself. TikTok's equivalents are all third-party
+// actors from different, less-established publishers with no clear "best"
+// pick, so this stays scoped to Instagram rather than guessing at one.
+const HASHTAG_ANALYTICS_ACTOR = 'apify/instagram-hashtag-analytics-scraper'
+
 function badRequest(message) {
   const err = new Error(message)
   err.statusCode = 400
@@ -79,6 +85,22 @@ export async function getResults(datasetId, platform) {
   return normalize(platform, Array.isArray(items) ? items : [])
 }
 
+export async function startHashtagRun(term) {
+  if (!term || !term.trim()) throw badRequest('Enter a niche keyword or hashtag to research.')
+  const clean = term.replace(/^#/, '').trim()
+  const { data } = await apifyFetch(`https://api.apify.com/v2/acts/${actorPath(HASHTAG_ANALYTICS_ACTOR)}/runs`, {
+    method: 'POST',
+    body: JSON.stringify({ hashtags: [clean] }),
+  })
+  return { runId: data.id, datasetId: data.defaultDatasetId, status: data.status }
+}
+
+export async function getHashtagResults(datasetId) {
+  if (!datasetId) throw badRequest('datasetId is required.')
+  const items = await apifyFetch(`https://api.apify.com/v2/datasets/${datasetId}/items?clean=true`)
+  return normalizeHashtagAnalytics(Array.isArray(items) ? items : [])
+}
+
 // Each platform's raw dataset items get collapsed to one row per unique
 // creator (hashtag/search results are per-post or per-video, so the same
 // profile often shows up multiple times) in a shape the CRM can insert directly.
@@ -138,6 +160,52 @@ function normalizeTikTok(items) {
     })
   }
   return [...seen.values()]
+}
+
+// The analytics actor groups suggestions into several buckets (related,
+// frequent, average, rare, and semantic variants of each) — merged here into
+// one deduplicated, volume-ranked list rather than showing 7 separate
+// categories, which would be exactly the dense/cluttered layout we're
+// avoiding elsewhere in this app.
+const HASHTAG_SUGGESTION_KEYS = ['related', 'frequent', 'average', 'rare', 'relatedFrequent', 'relatedAverage', 'relatedRare']
+
+// Volumes come back as formatted strings (e.g. "1.96 g", "234.5 k") rather
+// than raw numbers — parsed only for sorting; the original label is still
+// shown to the user since the exact magnitude convention isn't guaranteed.
+function parseVolume(label) {
+  if (label == null) return null
+  const match = String(label).trim().match(/^([\d.]+)\s*([kmgb])?$/i)
+  if (!match) return null
+  const num = parseFloat(match[1])
+  if (Number.isNaN(num)) return null
+  const suffix = (match[2] || '').toLowerCase()
+  const mult = suffix === 'k' ? 1e3 : suffix === 'm' ? 1e6 : suffix === 'g' || suffix === 'b' ? 1e9 : 1
+  return num * mult
+}
+
+function normalizeHashtagAnalytics(items) {
+  const seed = items[0]
+  if (!seed) return { postsCount: null, postsLabel: null, suggestions: [] }
+
+  const seen = new Map()
+  for (const key of HASHTAG_SUGGESTION_KEYS) {
+    const list = Array.isArray(seed[key]) ? seed[key] : []
+    for (const entry of list) {
+      const rawHash = entry?.hash ?? entry?.hashtag ?? entry?.name
+      if (!rawHash) continue
+      const hashtag = String(rawHash).replace(/^#/, '')
+      if (!hashtag || seen.has(hashtag)) continue
+      const label = entry?.info ?? entry?.count ?? null
+      seen.set(hashtag, { hashtag, label: label != null ? String(label) : null, volume: parseVolume(label) })
+    }
+  }
+
+  const suggestions = [...seen.values()].sort((a, b) => (b.volume ?? -1) - (a.volume ?? -1))
+  return {
+    postsCount: typeof seed.postsCount === 'number' ? seed.postsCount : null,
+    postsLabel: seed.posts ?? null,
+    suggestions,
+  }
 }
 
 function normalizeYouTube(items) {
