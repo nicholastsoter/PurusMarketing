@@ -212,7 +212,19 @@ export default function FindLeadsPage() {
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap">
                       <p className="font-medium text-[#1D1D1F]">{r.name}</p>
-                      <p className="text-xs text-[#A9A9AD]">@{r.handle}</p>
+                      {r.handleOrUrl ? (
+                        <a
+                          href={r.handleOrUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-xs text-accent-500 hover:text-accent-600 hover:underline transition"
+                        >
+                          @{r.handle}
+                        </a>
+                      ) : (
+                        <p className="text-xs text-[#A9A9AD]">@{r.handle}</p>
+                      )}
                     </td>
                     <td className="px-5 py-3.5 text-[#6E6E73] whitespace-nowrap">
                       {r.followerCount != null ? r.followerCount.toLocaleString() : '—'}
