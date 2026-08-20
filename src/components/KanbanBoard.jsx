@@ -11,6 +11,11 @@ export default function KanbanBoard() {
   const columns = useMemo(() => {
     const map = Object.fromEntries(STATUSES.map((s) => [s, []]))
     for (const c of contacts) (map[c.status] || map.Identified).push(c)
+    // Oldest-added at the top of each column, newest at the bottom, so the
+    // ones that have been sitting the longest are the easiest to spot.
+    for (const list of Object.values(map)) {
+      list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    }
     return map
   }, [contacts])
 
