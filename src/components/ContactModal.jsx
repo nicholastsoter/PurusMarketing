@@ -36,6 +36,12 @@ export default function ContactModal() {
     if (contact) setForm({ ...emptyForm, ...contact, follower_count: contact.follower_count ?? '' })
     else if (isCreating) setForm(emptyForm)
     setError('')
+    // Defensive reset: this component never unmounts between contacts (it
+    // always renders, just returns null when closed), so a stale `busy` from
+    // a prior contact (e.g. remove()'s success path not clearing it) would
+    // otherwise leak into whichever contact opens next and get stuck showing
+    // "Saving…" before any save was even triggered.
+    setBusy(false)
   }, [selectedId, isCreating]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null
@@ -70,6 +76,7 @@ export default function ContactModal() {
       closeModal()
     } catch (err) {
       setError(err.message || 'Something went wrong.')
+    } finally {
       setBusy(false)
     }
   }
