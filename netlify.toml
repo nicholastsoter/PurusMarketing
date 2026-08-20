@@ -1,0 +1,23 @@
+# Netlify config for Purus CRM.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# SPA fallback so react-router routes (e.g. /list) work on refresh.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Never cache the HTML shell — the browser must always revalidate so a new deploy's
+# JS is picked up immediately.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Hashed assets are immutable — safe to cache for a year.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
