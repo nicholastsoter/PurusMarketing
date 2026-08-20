@@ -27,8 +27,8 @@ function apifyDevApi() {
         req.on('data', (chunk) => { body += chunk })
         req.on('end', async () => {
           try {
-            const { platform, searchTerm } = body ? JSON.parse(body) : {}
-            const result = await startRun(platform, searchTerm)
+            const { platform, searchTerm, usOnly } = body ? JSON.parse(body) : {}
+            const result = await startRun(platform, searchTerm, usOnly)
             sendJson(res, 200, result)
           } catch (err) {
             sendJson(res, err.statusCode || 500, { error: err.message || 'Failed to start search' })

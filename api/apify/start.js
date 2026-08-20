@@ -6,8 +6,8 @@ export default async function handler(req, res) {
     return
   }
   try {
-    const { platform, searchTerm } = req.body || {}
-    const result = await startRun(platform, searchTerm)
+    const { platform, searchTerm, usOnly } = req.body || {}
+    const result = await startRun(platform, searchTerm, usOnly)
     res.status(200).json(result)
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message || 'Failed to start search' })

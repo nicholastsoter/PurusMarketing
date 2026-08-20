@@ -6,6 +6,14 @@ import { runApifySearch } from '../lib/apifyClient'
 
 const inputCls = 'rounded-xl border border-warm-200 px-3.5 py-2.5 text-sm text-[#1D1D1F] placeholder:text-[#A9A9AD] focus:outline-none focus:ring-2 focus:ring-accent-400/40 focus:border-accent-400 transition'
 
+// Best-effort match against whatever format Apify's channelLocation field
+// comes back in — not guaranteed to be an exact code or spelled-out name.
+function isUsLocation(location) {
+  if (!location) return false
+  const normalized = String(location).trim().toLowerCase()
+  return normalized === 'us' || normalized === 'usa' || normalized.includes('united states')
+}
+
 export default function FindLeadsPage() {
   const bulkAddContacts = useStore((s) => s.bulkAddContacts)
   const fetchKnownHandles = useStore((s) => s.fetchKnownHandles)
@@ -26,6 +34,7 @@ export default function FindLeadsPage() {
   const selected = useStore((s) => s.leadsSelected)
   const minFollowers = useStore((s) => s.leadsMinFollowers)
   const maxFollowers = useStore((s) => s.leadsMaxFollowers)
+  const usOnly = useStore((s) => s.leadsUsOnly)
   const allDuplicates = useStore((s) => s.leadsAllDuplicates)
   const rejectingId = useStore((s) => s.leadsRejectingId)
 
@@ -47,19 +56,27 @@ export default function FindLeadsPage() {
     // Instagram results never have a follower count, so a leftover min/max
     // from a previous TikTok/YouTube search must not silently zero these out.
     if (platform === 'Instagram') return results
+
+    let filtered = results
+    // TikTok's "US only" is applied at search time (proxyCountryCode), so
+    // there's nothing to filter here. YouTube has no reliable input-level
+    // geo option, so it's filtered here using each channel's About-page
+    // location — channels that never set one are excluded rather than
+    // guessed in, same reasoning as the follower-count filter below.
+    if (platform === 'YouTube' && usOnly) {
+      filtered = filtered.filter((r) => isUsLocation(r.location))
+    }
+
     const min = minFollowers === '' ? null : Number(minFollowers)
     const max = maxFollowers === '' ? null : Number(maxFollowers)
-    if (min == null && max == null) return results
-    // Followers is unknown for some leads (e.g. all Instagram results, since
-    // the hashtag scraper doesn't return profile stats) — exclude those when
-    // a range is set rather than guess, since we can't confirm they qualify.
-    return results.filter((r) => {
+    if (min == null && max == null) return filtered
+    return filtered.filter((r) => {
       if (r.followerCount == null) return false
       if (min != null && r.followerCount < min) return false
       if (max != null && r.followerCount > max) return false
       return true
     })
-  }, [results, minFollowers, maxFollowers, platform])
+  }, [results, minFollowers, maxFollowers, platform, usOnly])
 
   const runSearch = async (e) => {
     e.preventDefault()
@@ -77,7 +94,7 @@ export default function FindLeadsPage() {
     try {
       const { items } = await runApifySearch({
         startUrl: '/api/apify/start',
-        startBody: { platform, searchTerm: term.trim() },
+        startBody: { platform, searchTerm: term.trim(), usOnly },
         resultsUrl: (datasetId) => `/api/apify/results?datasetId=${encodeURIComponent(datasetId)}&platform=${encodeURIComponent(platform)}`,
         onProgress: (s) => useStore.setState({ leadsStatusMessage: `Searching ${platform} for "${term.trim()}"… (${s}s)` }),
       })
@@ -231,6 +248,15 @@ export default function FindLeadsPage() {
               disabled={platform === 'Instagram'}
             />
           </label>
+          <label className={`flex items-center gap-2 pb-2.5 text-sm ${platform === 'Instagram' ? 'text-[#A9A9AD]' : 'text-[#6E6E73]'}`}>
+            <input
+              type="checkbox"
+              checked={usOnly}
+              onChange={(e) => useStore.setState({ leadsUsOnly: e.target.checked })}
+              disabled={platform === 'Instagram'}
+            />
+            US only
+          </label>
           <button
             type="submit"
             disabled={loading || !term.trim()}
@@ -241,7 +267,7 @@ export default function FindLeadsPage() {
         </div>
         {platform === 'Instagram' && (
           <p className="text-xs text-[#A9A9AD]">
-            Instagram results don't include follower counts (the hashtag scraper returns posts, not profile stats), so the follower filter is unavailable here.
+            Instagram results don't include follower counts or location data (the hashtag scraper only returns posts, not profile stats), so the follower and US-only filters are both unavailable here.
           </p>
         )}
       </form>
@@ -273,7 +299,7 @@ export default function FindLeadsPage() {
 
       {!loading && !error && results && results.length > 0 && visibleResults.length === 0 && (
         <div className="bg-white rounded-2xl shadow-soft border border-warm-200/70 p-16 text-center">
-          <p className="text-sm text-[#6E6E73]">No results match that follower range. Try widening it.</p>
+          <p className="text-sm text-[#6E6E73]">No results match your filters. Try widening the follower range or turning off "US only".</p>
         </div>
       )}
 

@@ -52,20 +52,30 @@ async function apifyFetch(url, options = {}) {
   return res.json()
 }
 
-function buildActorInput(platform, searchTerm) {
+// US-only support differs by platform, not just a flag: Instagram's actor has
+// no geo input at all; TikTok has a documented proxyCountryCode field that
+// actually changes what gets scraped; YouTube's actor has no reliable geo
+// input (a community issue thread on the actor reports its gl= URL trick
+// doesn't change results) — so YouTube is filtered after the fact instead,
+// using the channelLocation field its output already includes.
+function buildActorInput(platform, searchTerm, { usOnly } = {}) {
   const term = searchTerm.replace(/^#/, '').trim()
   if (platform === 'Instagram') return { hashtags: [term], resultsType: 'posts', resultsLimit: 30 }
-  if (platform === 'TikTok') return { hashtags: [term], resultsPerPage: 30 }
+  if (platform === 'TikTok') {
+    const input = { hashtags: [term], resultsPerPage: 30 }
+    if (usOnly) input.proxyCountryCode = 'US'
+    return input
+  }
   if (platform === 'YouTube') return { searchQueries: [term], maxResults: 30 }
   throw badRequest(`Unsupported platform: ${platform}`)
 }
 
-export async function startRun(platform, searchTerm) {
+export async function startRun(platform, searchTerm, usOnly) {
   if (!searchTerm || !searchTerm.trim()) throw badRequest('Enter a hashtag or keyword to search.')
   const actorId = ACTOR_IDS[platform]
   if (!actorId) throw badRequest(`Unsupported platform: ${platform}`)
 
-  const input = buildActorInput(platform, searchTerm)
+  const input = buildActorInput(platform, searchTerm, { usOnly })
   const { data } = await apifyFetch(`https://api.apify.com/v2/acts/${actorPath(actorId)}/runs`, {
     method: 'POST',
     body: JSON.stringify(input),
@@ -222,6 +232,10 @@ function normalizeYouTube(items) {
       followerCount: typeof item.numberOfSubscribers === 'number' ? item.numberOfSubscribers : null,
       bio: rawText.slice(0, 160),
       email: extractEmail(rawText),
+      // Only some channels set this in their About page — used for the
+      // client-side "US only" filter, since there's no reliable way to
+      // ask this actor for US results directly.
+      location: item.channelLocation || null,
     })
   }
   return [...seen.values()]
