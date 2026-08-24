@@ -54,3 +54,15 @@ export function computePriorityScore(contact) {
   const label = score >= 66 ? 'High' : score >= 33 ? 'Medium' : 'Low'
   return { score, label }
 }
+
+// Same score, adapted for a Find Leads search result (before it's a
+// contact): follower count and bio use different field names there, and
+// there's no niche assigned yet, so fit is judged on bio text alone.
+export function computeLeadPriorityScore(result, platform) {
+  return computePriorityScore({
+    niche: '',
+    notes: result.bio || '',
+    follower_count: result.followerCount,
+    platform,
+  })
+}

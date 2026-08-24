@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { SEARCH_PLATFORMS } from '../lib/constants'
 import { runApifySearch } from '../lib/apifyClient'
+import { computeLeadPriorityScore } from '../lib/priorityScore'
+import PriorityBadge from '../components/PriorityBadge'
 
 const inputCls = 'rounded-xl border border-warm-200 px-3.5 py-2.5 text-sm text-[#1D1D1F] placeholder:text-[#A9A9AD] focus:outline-none focus:ring-2 focus:ring-accent-400/40 focus:border-accent-400 transition'
 
@@ -325,6 +327,7 @@ export default function FindLeadsPage() {
                 <tr className="border-b border-warm-200/70 text-left">
                   <th className="px-5 py-3 w-8" />
                   <th className="px-5 py-3 text-xs font-medium text-[#A9A9AD] uppercase tracking-wide">Handle</th>
+                  <th className="px-5 py-3 text-xs font-medium text-[#A9A9AD] uppercase tracking-wide">Priority</th>
                   <th className="px-5 py-3 text-xs font-medium text-[#A9A9AD] uppercase tracking-wide">Followers</th>
                   <th className="px-5 py-3 text-xs font-medium text-[#A9A9AD] uppercase tracking-wide">Email</th>
                   <th className="px-5 py-3 text-xs font-medium text-[#A9A9AD] uppercase tracking-wide">Bio</th>
@@ -357,6 +360,7 @@ export default function FindLeadsPage() {
                         <p className="text-xs text-[#A9A9AD]">@{r.handle}</p>
                       )}
                     </td>
+                    <td className="px-5 py-3.5"><PriorityBadge {...computeLeadPriorityScore(r, platform)} /></td>
                     <td className="px-5 py-3.5 text-[#6E6E73] whitespace-nowrap">
                       {r.followerCount != null ? r.followerCount.toLocaleString() : '—'}
                     </td>
