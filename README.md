@@ -42,6 +42,14 @@ The Board, List, and modal all work without this. Both of these need an Apify ac
 
 **Rejecting leads & duplicate prevention** — each Find Leads row has a **Reject** button that asks for an optional reason and remembers it, so that profile won't show up in future searches. Every search also skips anyone already in your `contacts` table. Both need the `rejected_leads` table, added to `supabase/schema.sql` — **if you set up the database before this feature existed, re-run the whole file in SQL Editor** (it's written to be safe to re-run: existing tables/policies are left alone, only the new table gets added). Until you do, searches still work — the duplicate check just silently skips itself and Reject shows an error instead of a table-not-found crash.
 
+**Outreach priority score** — a "Priority" badge on every contact (Board card and List's 2nd column, sortable), computed client-side in [`src/lib/priorityScore.js`](src/lib/priorityScore.js) from niche/notes keyword matches plus a log-scaled, per-platform-weighted follower count. It's a heuristic proxy for "worth reaching out to soon," not real audience-fit data (no scraper here exposes who actually follows someone) — the keyword list and platform weights are just a starting point, easy to retune in that one file as priorities change.
+
+**Additional contact channels** — the contact modal's "Handle / URL" field stays the one primary channel, but you can now add any number of extra ones (a second platform, email, phone, WhatsApp) via "+ Add channel", stored in a new `contact_channels` table.
+
+**Agreed-to-post & last-followed-up** — two new fields on the contact modal: a checkbox for whether they've agreed to post, and an editable date for when you last reached out. Both are plain columns added directly to `contacts`.
+
+Both of the above need the schema updated — same as `rejected_leads`, **re-run the whole `supabase/schema.sql` file in SQL Editor** if your database predates them; it's written to be safe to re-run.
+
 ## Deploy (Vercel)
 - Import this repo at [vercel.com/new](https://vercel.com/new) — it auto-detects Vite (build command `npm run build`, output `dist`; SPA fallback already set in `vercel.json`).
 - Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and (if using Find Leads) `APIFY_API_TOKEN` under Project Settings → Environment Variables, then redeploy — Vite bakes env vars in at build time, so a plain "add var" isn't enough on its own.

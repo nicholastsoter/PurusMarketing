@@ -93,6 +93,44 @@ export const useStore = create((set, get) => ({
     if (error) throw error
   },
 
+  fetchContactChannels: async (contactId) => {
+    const { data, error } = await supabase
+      .from('contact_channels')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('created_at', { ascending: true })
+    if (error) throw error
+    return data || []
+  },
+
+  // Reconciles the modal's current channel rows against what's actually in
+  // the database: deletes ones removed, inserts new ones (no id yet),
+  // updates the rest. Blank rows are dropped rather than saved.
+  saveContactChannels: async (contactId, current, original) => {
+    const currentIds = new Set(current.filter((c) => c.id).map((c) => c.id))
+    const toDelete = original.filter((c) => !currentIds.has(c.id)).map((c) => c.id)
+    const toInsert = current.filter((c) => !c.id && c.value.trim())
+    const toUpdate = current.filter((c) => c.id && c.value.trim())
+
+    if (toDelete.length) {
+      const { error } = await supabase.from('contact_channels').delete().in('id', toDelete)
+      if (error) throw error
+    }
+    if (toInsert.length) {
+      const { error } = await supabase
+        .from('contact_channels')
+        .insert(toInsert.map((c) => ({ contact_id: contactId, type: c.type, value: c.value.trim() })))
+      if (error) throw error
+    }
+    for (const c of toUpdate) {
+      const { error } = await supabase
+        .from('contact_channels')
+        .update({ type: c.type, value: c.value.trim() })
+        .eq('id', c.id)
+      if (error) throw error
+    }
+  },
+
   openContact: (id) => set({ selectedId: id, isCreating: false }),
   openNew: () => set({ isCreating: true, selectedId: null }),
   closeModal: () => set({ selectedId: null, isCreating: false }),

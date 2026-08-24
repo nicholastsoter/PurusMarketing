@@ -4,3 +4,7 @@ export const NICHE_SUGGESTIONS = ['Parenting', 'Homeschool', 'Faith-based', 'Tec
 
 // Platforms the Find Leads Apify search supports (a subset of PLATFORMS).
 export const SEARCH_PLATFORMS = ['Instagram', 'TikTok', 'YouTube']
+
+// Types available for a contact's additional channels (beyond their primary
+// Handle/URL field).
+export const CHANNEL_TYPES = [...PLATFORMS, 'Email', 'Phone', 'WhatsApp']

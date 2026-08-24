@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
-import { PLATFORMS, STATUSES, NICHE_SUGGESTIONS } from '../lib/constants'
+import { PLATFORMS, STATUSES, NICHE_SUGGESTIONS, CHANNEL_TYPES } from '../lib/constants'
 import { isHttpUrl } from '../lib/url'
 
 const emptyForm = {
@@ -13,6 +13,8 @@ const emptyForm = {
   offer_code: '',
   contact_info: '',
   notes: '',
+  agreed_to_post: false,
+  last_followed_up: '',
 }
 
 const inputCls = 'w-full rounded-xl border border-warm-200 px-3.5 py-2.5 text-sm text-[#1D1D1F] placeholder:text-[#A9A9AD] focus:outline-none focus:ring-2 focus:ring-accent-400/40 focus:border-accent-400 transition'
@@ -25,15 +27,19 @@ export default function ContactModal() {
   const addContact = useStore((s) => s.addContact)
   const updateContact = useStore((s) => s.updateContact)
   const deleteContact = useStore((s) => s.deleteContact)
+  const fetchContactChannels = useStore((s) => s.fetchContactChannels)
+  const saveContactChannels = useStore((s) => s.saveContactChannels)
 
   const contact = contacts.find((c) => c.id === selectedId)
   const open = isCreating || !!contact
   const [form, setForm] = useState(emptyForm)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [channels, setChannels] = useState([])
+  const [originalChannels, setOriginalChannels] = useState([])
 
   useEffect(() => {
-    if (contact) setForm({ ...emptyForm, ...contact, follower_count: contact.follower_count ?? '' })
+    if (contact) setForm({ ...emptyForm, ...contact, follower_count: contact.follower_count ?? '', last_followed_up: contact.last_followed_up ?? '' })
     else if (isCreating) setForm(emptyForm)
     setError('')
     // Defensive reset: this component never unmounts between contacts (it
@@ -42,11 +48,29 @@ export default function ContactModal() {
     // otherwise leak into whichever contact opens next and get stuck showing
     // "Saving…" before any save was even triggered.
     setBusy(false)
+
+    if (contact) {
+      let current = true
+      fetchContactChannels(contact.id)
+        .then((rows) => {
+          if (!current) return
+          setChannels(rows)
+          setOriginalChannels(rows)
+        })
+        .catch((err) => { if (current) setError(err.message || 'Failed to load contact channels.') })
+      return () => { current = false }
+    }
+    setChannels([])
+    setOriginalChannels([])
   }, [selectedId, isCreating]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+
+  const addChannelRow = () => setChannels((prev) => [...prev, { type: CHANNEL_TYPES[0], value: '' }])
+  const updateChannelRow = (index, patch) => setChannels((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)))
+  const removeChannelRow = (index) => setChannels((prev) => prev.filter((_, i) => i !== index))
 
   const save = async () => {
     if (!form.name.trim()) { setError('Name is required.'); return }
@@ -55,10 +79,11 @@ export default function ContactModal() {
     const payload = {
       ...form,
       follower_count: form.follower_count === '' ? null : Number(form.follower_count),
+      last_followed_up: form.last_followed_up || null,
     }
     try {
-      if (contact) await updateContact(contact.id, payload)
-      else await addContact(payload)
+      const saved = contact ? await updateContact(contact.id, payload) : await addContact(payload)
+      await saveContactChannels(saved.id, channels, originalChannels)
       closeModal()
     } catch (err) {
       setError(err.message || 'Something went wrong.')
@@ -134,6 +159,44 @@ export default function ContactModal() {
             <input className={inputCls} value={form.handle_or_url} onChange={set('handle_or_url')} placeholder="@handle or link" />
           </Field>
 
+          <div className="space-y-2">
+            <span className="block text-xs font-medium text-[#6E6E73]">Additional Contact Channels</span>
+            {channels.length > 0 && (
+              <div className="space-y-2">
+                {channels.map((ch, i) => (
+                  <div key={ch.id || `new-${i}`} className="flex gap-2">
+                    <select
+                      className={`${inputCls} w-32 shrink-0`}
+                      value={ch.type}
+                      onChange={(e) => updateChannelRow(i, { type: e.target.value })}
+                    >
+                      {CHANNEL_TYPES.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <input
+                      className={`${inputCls} flex-1`}
+                      value={ch.value}
+                      onChange={(e) => updateChannelRow(i, { value: e.target.value })}
+                      placeholder="@handle, email, or number"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeChannelRow(i)}
+                      className="px-2 text-[#A9A9AD] hover:text-rose-500 transition"
+                      aria-label="Remove channel"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button type="button" onClick={addChannelRow} className="text-xs text-accent-500 hover:text-accent-600 transition">
+              + Add channel
+            </button>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <Field label="Follower Count">
               <input type="number" className={inputCls} value={form.follower_count} onChange={set('follower_count')} placeholder="0" />
@@ -145,6 +208,20 @@ export default function ContactModal() {
                   <option key={n} value={n} />
                 ))}
               </datalist>
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 items-end">
+            <label className="flex items-center gap-2 pb-2.5 text-sm text-[#1D1D1F]">
+              <input
+                type="checkbox"
+                checked={form.agreed_to_post}
+                onChange={(e) => setForm((f) => ({ ...f, agreed_to_post: e.target.checked }))}
+              />
+              Agreed to post
+            </label>
+            <Field label="Last Followed Up">
+              <input type="date" className={inputCls} value={form.last_followed_up} onChange={set('last_followed_up')} />
             </Field>
           </div>
 

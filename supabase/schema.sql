@@ -13,9 +13,16 @@ create table if not exists contacts (
   offer_code text,
   contact_info text,
   notes text,
+  agreed_to_post boolean not null default false,
+  last_followed_up date,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Safe to re-run on a database that already has the contacts table from
+-- before these columns existed.
+alter table contacts add column if not exists agreed_to_post boolean not null default false;
+alter table contacts add column if not exists last_followed_up date;
 
 -- Keep updated_at current on every edit.
 create or replace function set_updated_at()
@@ -57,5 +64,24 @@ alter table rejected_leads enable row level security;
 drop policy if exists "Authenticated users can manage rejected leads" on rejected_leads;
 create policy "Authenticated users can manage rejected leads"
 on rejected_leads for all
+using (auth.role() = 'authenticated')
+with check (auth.role() = 'authenticated');
+
+-- Extra contact methods beyond a contact's primary handle_or_url (e.g. a
+-- second platform, an email, a phone/WhatsApp number). handle_or_url on
+-- contacts stays as the primary channel — this table is purely additive.
+create table if not exists contact_channels (
+  id uuid primary key default gen_random_uuid(),
+  contact_id uuid not null references contacts(id) on delete cascade,
+  type text not null default 'Other',
+  value text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table contact_channels enable row level security;
+
+drop policy if exists "Authenticated users can manage contact channels" on contact_channels;
+create policy "Authenticated users can manage contact channels"
+on contact_channels for all
 using (auth.role() = 'authenticated')
 with check (auth.role() = 'authenticated');
