@@ -2,25 +2,35 @@ import { useMemo, useState } from 'react'
 import { useStore } from '../store/useStore'
 import StatusBadge from './StatusBadge'
 import NicheTag from './NicheTag'
+import PriorityBadge from './PriorityBadge'
 import { isHttpUrl } from '../lib/url'
+import { computePriorityScore } from '../lib/priorityScore'
+
+function sortValue(contact, key, scores) {
+  if (key === 'priority') return scores.get(contact.id)?.score ?? 0
+  if (key === 'last_followed_up') return contact.last_followed_up ? new Date(contact.last_followed_up).getTime() : -Infinity
+  return (contact[key] || '').toString().toLowerCase()
+}
 
 export default function ContactTable() {
   const contacts = useStore((s) => s.contacts)
   const openContact = useStore((s) => s.openContact)
   const [sort, setSort] = useState({ key: null, dir: 'asc' })
 
+  const scores = useMemo(() => new Map(contacts.map((c) => [c.id, computePriorityScore(c)])), [contacts])
+
   const sorted = useMemo(() => {
     if (!sort.key) return contacts
     const copy = [...contacts]
     copy.sort((a, b) => {
-      const av = (a[sort.key] || '').toString().toLowerCase()
-      const bv = (b[sort.key] || '').toString().toLowerCase()
+      const av = sortValue(a, sort.key, scores)
+      const bv = sortValue(b, sort.key, scores)
       if (av < bv) return sort.dir === 'asc' ? -1 : 1
       if (av > bv) return sort.dir === 'asc' ? 1 : -1
       return 0
     })
     return copy
-  }, [contacts, sort])
+  }, [contacts, sort, scores])
 
   const toggleSort = (key) => {
     setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))
@@ -34,11 +44,13 @@ export default function ContactTable() {
         <thead>
           <tr className="border-b border-warm-200/70 text-left">
             <Th label="Name" />
+            <Th label="Priority" sortKey="priority" sort={sort} onSort={toggleSort} />
             <Th label="Platform" />
             <Th label="Niche" sortKey="niche" sort={sort} onSort={toggleSort} />
             <Th label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
             <Th label="Followers" />
             <Th label="Offer Code" />
+            <Th label="Last Followed Up" sortKey="last_followed_up" sort={sort} onSort={toggleSort} />
           </tr>
         </thead>
         <tbody>
@@ -66,6 +78,7 @@ export default function ContactTable() {
                   )
                 )}
               </td>
+              <td className="px-5 py-3.5"><PriorityBadge {...scores.get(c.id)} /></td>
               <td className="px-5 py-3.5 text-[#6E6E73] whitespace-nowrap">{c.platform}</td>
               <td className="px-5 py-3.5"><NicheTag niche={c.niche} /></td>
               <td className="px-5 py-3.5"><StatusBadge status={c.status} /></td>
@@ -73,6 +86,7 @@ export default function ContactTable() {
                 {c.follower_count != null ? c.follower_count.toLocaleString() : '—'}
               </td>
               <td className="px-5 py-3.5 text-[#6E6E73] whitespace-nowrap">{c.offer_code || '—'}</td>
+              <td className="px-5 py-3.5 text-[#6E6E73] whitespace-nowrap">{c.last_followed_up || '—'}</td>
             </tr>
           ))}
         </tbody>
