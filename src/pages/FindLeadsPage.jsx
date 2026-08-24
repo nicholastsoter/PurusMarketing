@@ -8,6 +8,17 @@ import PriorityBadge from '../components/PriorityBadge'
 
 const inputCls = 'rounded-xl border border-warm-200 px-3.5 py-2.5 text-sm text-[#1D1D1F] placeholder:text-[#A9A9AD] focus:outline-none focus:ring-2 focus:ring-accent-400/40 focus:border-accent-400 transition'
 
+// Each option's direction is whatever reads most useful for that field —
+// highest priority/followers first, has-an-email first, name A→Z — rather
+// than a separate asc/desc toggle to keep this to one control.
+const SORT_OPTIONS = [
+  { value: 'default', label: 'Default' },
+  { value: 'priority', label: 'Priority (high to low)' },
+  { value: 'followers', label: 'Followers (high to low)' },
+  { value: 'email', label: 'Has email first' },
+  { value: 'name', label: 'Name (A–Z)' },
+]
+
 // Best-effort match against whatever format Apify's channelLocation field
 // comes back in — not guaranteed to be an exact code or spelled-out name.
 function isUsLocation(location) {
@@ -37,6 +48,7 @@ export default function FindLeadsPage() {
   const minFollowers = useStore((s) => s.leadsMinFollowers)
   const maxFollowers = useStore((s) => s.leadsMaxFollowers)
   const usOnly = useStore((s) => s.leadsUsOnly)
+  const sortBy = useStore((s) => s.leadsSortBy)
   const allDuplicates = useStore((s) => s.leadsAllDuplicates)
   const rejectingId = useStore((s) => s.leadsRejectingId)
 
@@ -79,6 +91,21 @@ export default function FindLeadsPage() {
       return true
     })
   }, [results, minFollowers, maxFollowers, platform, usOnly])
+
+  const sortedResults = useMemo(() => {
+    if (!visibleResults || sortBy === 'default') return visibleResults
+    const copy = [...visibleResults]
+    if (sortBy === 'priority') {
+      copy.sort((a, b) => computeLeadPriorityScore(b, platform).score - computeLeadPriorityScore(a, platform).score)
+    } else if (sortBy === 'followers') {
+      copy.sort((a, b) => (b.followerCount ?? -1) - (a.followerCount ?? -1))
+    } else if (sortBy === 'email') {
+      copy.sort((a, b) => (b.email ? 1 : 0) - (a.email ? 1 : 0))
+    } else if (sortBy === 'name') {
+      copy.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    }
+    return copy
+  }, [visibleResults, sortBy, platform])
 
   const runSearch = async (e) => {
     e.preventDefault()
@@ -159,9 +186,9 @@ export default function FindLeadsPage() {
   }
 
   const toggleAll = () => {
-    if (!visibleResults?.length) return
+    if (!sortedResults?.length) return
     useStore.setState((s) => ({
-      leadsSelected: s.leadsSelected.size === visibleResults.length ? new Set() : new Set(visibleResults.map((r) => r.externalId)),
+      leadsSelected: s.leadsSelected.size === sortedResults.length ? new Set() : new Set(sortedResults.map((r) => r.externalId)),
     }))
   }
 
@@ -259,6 +286,18 @@ export default function FindLeadsPage() {
             />
             US only
           </label>
+          <label className="space-y-1.5">
+            <span className="block text-xs font-medium text-[#6E6E73]">Sort by</span>
+            <select
+              className={inputCls}
+              value={sortBy}
+              onChange={(e) => useStore.setState({ leadsSortBy: e.target.value })}
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
           <button
             type="submit"
             disabled={loading || !term.trim()}
@@ -305,11 +344,11 @@ export default function FindLeadsPage() {
         </div>
       )}
 
-      {!loading && visibleResults && visibleResults.length > 0 && (
+      {!loading && sortedResults && sortedResults.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 text-xs text-[#6E6E73]">
-              <input type="checkbox" checked={selected.size === visibleResults.length} onChange={toggleAll} />
+              <input type="checkbox" checked={selected.size === sortedResults.length} onChange={toggleAll} />
               {selected.size ? `${selected.size} selected` : 'Select all'}
             </label>
             <button
@@ -335,7 +374,7 @@ export default function FindLeadsPage() {
                 </tr>
               </thead>
               <tbody>
-                {visibleResults.map((r) => (
+                {sortedResults.map((r) => (
                   <tr
                     key={r.externalId}
                     onClick={() => toggleOne(r.externalId)}

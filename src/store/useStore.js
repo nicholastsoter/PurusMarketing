@@ -17,6 +17,7 @@ export const useStore = create((set, get) => ({
   leadsMinFollowers: '',
   leadsMaxFollowers: '',
   leadsUsOnly: false,
+  leadsSortBy: 'default',
   leadsResults: null,
   leadsSelected: new Set(),
   leadsAllDuplicates: false,
